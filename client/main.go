@@ -22,5 +22,10 @@ func main() {
 		}
 		io.WriteString(os.Stdout, fmt.Sprintf("Custom output! %s", string(buf)))
 		// выводим измененное сообщение сервера в консоль
+
+		for i := range buf {
+			buf[i] = 0
+		}
+
 	}
 }
