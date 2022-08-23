@@ -170,10 +170,11 @@ func createFSWrapper(dir2Server string) fsWrapper {
 
 func (h *fsWrapper) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
-	defer r.Body.Close()
-
-	fmt.Println("---")
-	fmt.Println("uri: ", r.RequestURI)
+	defer func() {
+		if r.Body != nil {
+			r.Body.Close()
+		}
+	}()
 
 	var ext string
 	if r.Method == http.MethodGet {
