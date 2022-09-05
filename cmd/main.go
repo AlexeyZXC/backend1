@@ -1,17 +1,20 @@
 package main
 
 import (
-	"net/http"
-
-	"github.com/go-chi/chi/v5"
-	"github.com/go-chi/chi/v5/middleware"
+	"github.com/AlexeyZXC/backend1/tree/CourseProject/api/handler"
+	"github.com/AlexeyZXC/backend1/tree/CourseProject/api/handler/routerchi"
+	"github.com/AlexeyZXC/backend1/tree/CourseProject/api/server"
+	"github.com/AlexeyZXC/backend1/tree/CourseProject/app/repo/link"
 )
 
 func main() {
-	r := chi.NewRouter()
-	r.Use(middleware.Logger)
-	r.Get("/", func(w http.ResponseWriter, r *http.Request) {
-		w.Write([]byte("chi router is working."))
-	})
-	http.ListenAndServe(":8000", r)
+
+	ls := link.NewLinks()
+	h := handler.NewHandlers(ls)
+
+	rh := routerchi.NewRouterChi(h)
+
+	srv := server.NewServer(":8000", rh)
+
+	srv.Start(ls)
 }
