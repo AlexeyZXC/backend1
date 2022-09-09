@@ -3,12 +3,24 @@ package handler
 import (
 	"context"
 	"fmt"
+	"time"
 
 	"github.com/AlexeyZXC/backend1/tree/CourseProject/app/repo/link"
 )
 
 type Handlers struct {
 	hls *link.Links
+}
+
+type Stat struct {
+	UserIP   string
+	PassTime time.Time
+}
+
+type Link struct {
+	ShortLink int    `json:"surl"`
+	LongLink  string `json:"lurl"`
+	StatData  []Stat
 }
 
 func NewHandlers(ls *link.Links) *Handlers {
@@ -18,13 +30,16 @@ func NewHandlers(ls *link.Links) *Handlers {
 	return r
 }
 
-func (ls *Handlers) CreateShortLink(ctx context.Context, longLink string) (*link.Link, error) {
+func (ls *Handlers) CreateShortLink(ctx context.Context, longLink string) (Link, error) {
 	l, err := ls.hls.CreateShortLink(ctx, longLink)
 	if err != nil {
-		return nil, fmt.Errorf("err while creating short link: %w", err)
+		return Link{}, fmt.Errorf("err while creating short link: %w", err)
 	}
 
-	return l, nil
+	return Link{
+		ShortLink: l.ShortLink,
+		LongLink:  l.LongLink,
+	}, nil
 }
 
 func (ls *Handlers) UpdateStat(ctx context.Context, shortLink int, ip string) error {

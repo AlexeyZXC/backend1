@@ -35,5 +35,6 @@ func (s *Server) Stop() {
 
 func (s *Server) Start(ls *link.Links) {
 	s.ls = ls
-	go s.srv.ListenAndServe()
+	//go s.srv.ListenAndServe()
+	s.srv.ListenAndServe()
 }
