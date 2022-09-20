@@ -1,27 +1,40 @@
+// The package servers as a router.
 package routerchi
 
 import (
+	"bytes"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
+	"strconv"
 
 	"github.com/AlexeyZXC/backend1/tree/CourseProject/api/handler"
+	"github.com/AlexeyZXC/backend1/tree/CourseProject/app/repo/pages"
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/render"
+	"go.uber.org/zap"
 )
 
 type RouterChi struct {
 	*chi.Mux
-	ls *handler.Handlers
+	ls  *handler.Handlers
+	log *zap.SugaredLogger
 }
 
-func NewRouterChi(ls *handler.Handlers) *RouterChi {
+// NewRouterChi returns a new object of Router with the embedded a Chi mux.
+func NewRouterChi(ls *handler.Handlers, log *zap.SugaredLogger) *RouterChi {
 	r := chi.NewRouter()
 	ret := &RouterChi{
-		ls: ls,
+		ls:  ls,
+		log: log,
 	}
 
-	//r.Post("/genShortLink/{longLink}", ret.CreateShortLink)
+	mwl := &mwLog{log}
+	r.Use(mwl.Logger)
+
+	r.Get("/stat/{id}", ret.OpenStatLink)
+	r.Get("/sl/{id}", ret.OpenShortLink)
 	r.Post("/", ret.CreateShortLink)
 	r.Get("/", ret.defaultPage)
 
@@ -31,19 +44,7 @@ func NewRouterChi(ls *handler.Handlers) *RouterChi {
 
 type Link handler.Link
 
-func (l *Link) Bind(r *http.Request) error { //todo get longlink from request
-	if err := r.ParseForm(); err != nil {
-		fmt.Println("fail parse form: ", err)
-		return err
-	}
-	l.LongLink = r.FormValue("lurl")
-
-	fmt.Println("bind: r.Form:", r.Form)
-	// data := link.Stat{
-	// 	UserIP:   r.RemoteAddr,
-	// 	PassTime: time.Now(),
-	// }
-	//l.StatData = append(l.StatData, data)
+func (l *Link) Bind(r *http.Request) error {
 	return nil
 }
 
@@ -51,20 +52,26 @@ func (Link) Render(w http.ResponseWriter, r *http.Request) error {
 	return nil
 }
 
+type mwLog struct {
+	log *zap.SugaredLogger
+}
+
+// Logger serves as a middleware for logging purpose.
+func (mwl *mwLog) Logger(handler http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+
+		body, _ := io.ReadAll(r.Body)
+		defer r.Body.Close()
+
+		r.Body = io.NopCloser(bytes.NewBuffer(body))
+		mwl.log.Infoln(r.Method + ": " + string(body))
+
+		handler.ServeHTTP(w, r)
+	})
+}
+
+// CreateShortLink processes Post requests on "/" path.
 func (rt *RouterChi) CreateShortLink(w http.ResponseWriter, r *http.Request) {
-
-	method := r.Method
-	fmt.Printf("CreateShortLink: method: %v\n", method)
-
-	defer r.Body.Close()
-
-	b, err := io.ReadAll(r.Body)
-	if err != nil {
-		render.Render(w, r, ErrInvalidRequest(err))
-		return
-	}
-	fmt.Println("body: ", string(b))
-
 	rl := Link{}
 	if err := render.Bind(r, &rl); err != nil {
 		render.Render(w, r, ErrRender(err))
@@ -77,69 +84,83 @@ func (rt *RouterChi) CreateShortLink(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	render.Render(w, r, Link(l))
+	_, err = fmt.Fprintf(w, pages.DefaultPageContent, l.LongLink, pages.ShortLinkUrl+l.ShortLink, pages.StatUrl+l.ShortLink)
+	if err != nil {
+		render.Render(w, r, ErrRender(err))
+	}
 }
 
+// OpenShortLink processes Get requests on "/sl/{id}" path.
+func (rt *RouterChi) OpenShortLink(w http.ResponseWriter, r *http.Request) {
+	sl := chi.URLParam(r, "id")
+	if sl == "" {
+		render.Render(w, r, ErrRender(errors.New("empty short link")))
+	}
+	sli, err := strconv.Atoi(sl)
+	if err != nil {
+		render.Render(w, r, ErrRender(errors.New("wrong short link")))
+		return
+	}
+
+	ll, err := rt.ls.GetLongLink(r.Context(), sli)
+	if err != nil {
+		render.Render(w, r, ErrRender(err))
+		return
+	}
+
+	if ll.LongLink != "" {
+		http.Redirect(w, r, ll.LongLink, http.StatusMovedPermanently)
+
+		if err := rt.ls.UpdateStat(r.Context(), sli, r.RemoteAddr); err != nil {
+			fmt.Printf("failed to update stat for short Link(%v), err: %v \n", sli, err)
+		}
+
+	} else {
+		http.Redirect(w, r, ll.LongLink, http.StatusNotFound)
+	}
+}
+
+// defaultPage processes Get requests on "/" path.
 func (rt *RouterChi) defaultPage(w http.ResponseWriter, r *http.Request) {
-
-	q := chi.URLParam(r, "fname")
-	method := r.Method
-	fmt.Printf("CreateShortLink: method: %v, fname: %v\n", method, q)
-
-	bodyContent := `
-	<h1>URL shortener</h1>
-
-	<form action="/" method="post" enctype="text/json">
-	  <label for="lurl">Long URL:</label>
-	  <input type="text" id="lurl" name="lurl"><br><br>
-	  <label for="surl">Short URL:</label>
-	  <input type="text" id="surl" name="surl"><br><br>
-	  <input type="submit" value="Submit">
-	</form>
-	`
-	n, err := w.Write([]byte(bodyContent))
+	_, err := fmt.Fprintf(w, pages.DefaultPageContent, "", "", "")
 	if err != nil {
-		fmt.Println("defaultPage: err:", err)
+		render.Render(w, r, ErrRender(err))
 	}
-	if n != len(bodyContent) {
-		fmt.Printf("defaultPage: wrote: %v instead of %v\n", n, len(bodyContent))
-	}
-
-	//render.Render(w, r, nil)
 }
 
-func (rt *RouterChi) UpdateStat(w http.ResponseWriter, r *http.Request) {
-	rl := Link{}
-	if err := render.Bind(r, &rl); err != nil {
-		render.Render(w, r, ErrRender(err))
+// OpenStatLink processes Get requests on "/stat/{id}" path.
+func (rt *RouterChi) OpenStatLink(w http.ResponseWriter, r *http.Request) {
+	sl := chi.URLParam(r, "id")
+	if sl == "" {
+		render.Render(w, r, ErrRender(errors.New("empty short link")))
+	}
+	sli, err := strconv.Atoi(sl)
+	if err != nil {
+		render.Render(w, r, ErrRender(errors.New("wrong short link")))
 		return
 	}
 
-	if err := rt.ls.UpdateStat(r.Context(), rl.ShortLink, rl.StatData[0].UserIP); err != nil {
-		render.Render(w, r, ErrRender(err))
-		return
-	}
-
-	render.Render(w, r, Link{})
-}
-
-func (rt *RouterChi) GetStat(w http.ResponseWriter, r *http.Request) {
-	rl := Link{}
-	if err := render.Bind(r, &rl); err != nil {
-		render.Render(w, r, ErrRender(err))
-		return
-	}
-
-	stat, err := rt.ls.GetStat(r.Context(), rl.ShortLink)
+	stat, err := rt.ls.GetStat(r.Context(), sli)
 	if err != nil {
 		render.Render(w, r, ErrRender(err))
 		return
 	}
+
+	ll, err := rt.ls.GetLongLink(r.Context(), sli)
+	if err != nil {
+		render.Render(w, r, ErrRender(err))
+		return
+	}
+
+	var rl Link
+	rl.ShortLink = pages.ShortLinkUrl + sl
+	rl.LongLink = ll.LongLink
 
 	for _, s := range stat {
 		var st handler.Stat
 		st.UserIP = s.UserIP
 		st.PassTime = s.PassTime
+
 		rl.StatData = append(rl.StatData, st)
 	}
 

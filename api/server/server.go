@@ -3,17 +3,21 @@ package server
 import (
 	"context"
 	"net/http"
+	"sync"
 	"time"
 
 	"github.com/AlexeyZXC/backend1/tree/CourseProject/app/repo/link"
+	"go.uber.org/zap"
 )
 
 type Server struct {
 	srv http.Server
 	ls  *link.Links
+	wg  *sync.WaitGroup
+	log *zap.SugaredLogger
 }
 
-func NewServer(addr string, h http.Handler) *Server {
+func NewServer(addr string, h http.Handler, wg *sync.WaitGroup, log *zap.SugaredLogger) *Server {
 	s := &Server{}
 
 	s.srv = http.Server{
@@ -23,6 +27,8 @@ func NewServer(addr string, h http.Handler) *Server {
 		WriteTimeout:      30 * time.Second,
 		ReadHeaderTimeout: 30 * time.Second,
 	}
+	s.wg = wg
+	s.log = log
 
 	return s
 }
@@ -35,6 +41,12 @@ func (s *Server) Stop() {
 
 func (s *Server) Start(ls *link.Links) {
 	s.ls = ls
-	//go s.srv.ListenAndServe()
-	s.srv.ListenAndServe()
+	go func() {
+		s.log.Infof("--- Working ---")
+		err := s.srv.ListenAndServe()
+		if err != nil {
+			s.log.Infof("Failed to start server: ", err)
+		}
+		s.wg.Add(-1)
+	}()
 }

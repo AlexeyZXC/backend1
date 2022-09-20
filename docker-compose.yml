@@ -1,0 +1,47 @@
+version: "3.7"
+
+services:
+
+  registry:
+    image: registry:2
+    container_name: registry
+    ports:
+      - 5000:5000
+    restart: always
+    networks:
+      - shortener_net
+
+  postgres:
+    image: postgres:12
+    container_name: postgres
+    restart: always
+    ports:
+      - 5432:5432
+    volumes:
+      - ./sql:/docker-entrypoint-initdb.d
+      #- /opt/databases/shortener_postgres_ls8:/var/lib/postgresql/data     
+    environment:
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: shortenerdb
+    networks:
+      - shortener_net
+
+  url_shortener:
+    image: 127.0.0.1:5000/url_shortener:latest
+    container_name: url_shortener    
+    build: 
+      context: .
+      dockerfile: Dockerfile
+    restart: always
+    ports:
+      - 8000:8000
+    environment:
+      PG_DSN: "postgres://postgres:postgres@postgres/shortenerdb?sslmode=disable"
+    depends_on:
+      - registry
+      - postgres
+    networks:
+      - shortener_net
+
+networks:
+  shortener_net:
