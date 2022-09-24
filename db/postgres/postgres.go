@@ -17,7 +17,7 @@ import (
 
 var _ link.LinkStore = &PgDB{}
 
-const UrlExample = "postgres://postgres:postgres@localhost:5432/shortenerdb"
+//const UrlExample = "postgres://postgres:postgres@localhost:5432/shortenerdb"
 
 type PgDB struct {
 	sync.Mutex
@@ -43,9 +43,10 @@ func WaitDB() {
 
 // NewPgDB returns new database object (PgDB) with the installed connection to it.
 func NewPgDB() (*PgDB, error) {
-	WaitDB()
+	//WaitDB()
 
 	UrlExample := os.Getenv("PG_DSN")
+
 	conn, err := pgx.Connect(context.Background(), UrlExample)
 	if err != nil {
 		return nil, fmt.Errorf("unable to connect to database: %w", err)
