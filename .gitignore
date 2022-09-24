@@ -6,7 +6,7 @@
 *.dylib
 
 # ignore files without extension
-*
+# *
 !*/
 !*.*
 

@@ -60,10 +60,14 @@ type mwLog struct {
 func (mwl *mwLog) Logger(handler http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 
-		body, _ := io.ReadAll(r.Body)
-		defer r.Body.Close()
+		var body []byte
 
-		r.Body = io.NopCloser(bytes.NewBuffer(body))
+		if r.Body != nil {
+			body, _ = io.ReadAll(r.Body)
+			defer r.Body.Close()
+			r.Body = io.NopCloser(bytes.NewBuffer(body))
+		}
+
 		mwl.log.Infoln(r.Method + ": " + string(body))
 
 		handler.ServeHTTP(w, r)

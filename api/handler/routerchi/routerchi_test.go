@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"strconv"
 	"testing"
 
@@ -18,8 +19,21 @@ import (
 	"github.com/AlexeyZXC/backend1/tree/CourseProject/db/postgres"
 )
 
+func TestMain(m *testing.M) {
+	err := os.Setenv("PG_DSN", "postgres://postgres:postgres@localhost:5432/shortenerdb")
+	if err != nil {
+		fmt.Println("setEnv failed: ", err)
+		return
+	}
+	defer os.Unsetenv("PG_DSN")
+
+	code := m.Run()
+
+	os.Exit(code)
+}
+
 func clearDB() (*pgx.Conn, error) {
-	UrlExample := postgres.UrlExample
+	UrlExample := os.Getenv("PG_DSN")
 	conn, err := pgx.Connect(context.Background(), UrlExample)
 	if err != nil {
 		return nil, err
@@ -38,7 +52,8 @@ func clearDB() (*pgx.Conn, error) {
 }
 
 func getShortID() (int, error) {
-	UrlExample := postgres.UrlExample
+	UrlExample := os.Getenv("PG_DSN")
+
 	conn, err := pgx.Connect(context.Background(), UrlExample)
 	if err != nil {
 		return 0, err
